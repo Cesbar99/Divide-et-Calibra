@@ -1,0 +1,5 @@
+# Temperature scaling
+max_iter: 500
+temp_lr: 0.01
+adabw: False
+num_neighbors: 100

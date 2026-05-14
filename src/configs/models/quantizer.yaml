@@ -1,0 +1,38 @@
+defaults:
+  - _self_
+
+model: quantiser
+data_name: 'otto'
+
+optimizer:
+  name: adam #sgd #adam 
+  lr: 1e-3 #1e-3
+  weight_decay: 0. #0.0001
+  maxiter: 500
+
+loss:
+  name: #focal
+  gamma: 2
+
+# calibration hyper-parameters                                                                                                                                                                                        
+slots: [64] #[16, 32, 128, 256] # USED 128 FOR VIT WITH TISSUE # 192 FOR VIT WITH CIFAR100
+S: 64
+d: 32
+kappas: [64] #[128] #[32, 64] #[16, 32, 128, 256] # USED 32 FOR VIT WITH CIFR100 and for TISSUE RESNET
+K: 64 #[64] #tissue: 16 # 32 64?
+vq_decay: 0.99 # 0.5
+vq_eps: 1e-8
+hidden: 0.
+dropout: 0.1
+epochs: 100
+similarity_dim: 50
+adabw: False                # If true uses adaptive bandwidth for lce computation else fixed bandwidth
+learn_pi: False             # If true learns the prior probabilities of the VQ codebook vectors
+diag: False                 # If true learns the diagonal latent miscalibration component
+lambda_reg: 0.              # Weight of the regularization term (not used?)
+random: False               # If true uses random quantization indices instead of VQ indices during training
+L1: False                   # If true uses L1 distance instead of L2 distance for the VQ codebook vectors
+quantization_only: False    # If true only performs quantization without calibration
+standard_dirichlet: False   # If true uses standard dirichlet calibration on top of quantization
+learn_bias: False           # If true learns a bias term per codebook vector
+quadratic: False            # If true uses quadratic calibration on top of quantization

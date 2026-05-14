@@ -1,0 +1,24 @@
+defaults:
+  - _self_
+
+model: covtype_resmlp
+temperature: 1.0
+use_acc: True
+epochs: 10
+depth: 12
+dropout: 0
+loss:  
+  name: # focal
+  gamma: 2
+
+optimizer:
+  name: adam
+  lr: 1e-4
+  
+  weight_decay: 0. #5e-4
+  scheduler: #StepLR
+  step_size: 2
+  gamma: 0.8
+
+
+  

@@ -1,0 +1,28 @@
+defaults:
+  - _self_
+
+model: replicator
+data_name: 'otto'
+
+max_iter: 500
+lr: 1e-3
+weight_decay: 0. #0.0001
+optimizer: 'adam'              # optimizer to use for training the calibrator (default: 'adam', other options: 'sgd', 'adamw')
+similarity_dim: 50
+n_steps: 5
+step_size: 0.1
+jac_reg: 0.
+kl_reg: 0.  
+l2_reg: 0.      
+state_dependent: False        
+#fitness_clip: False
+feature_dim: 2048
+alpha: 0.05                    # weight for the auxiliary loss modelling residuals
+finetune_epochs: 10
+finetune_grad_clip: 1.0
+fit_stage: True
+potential: True                # whether to use a potential-based model (REPLICATOR) or a fitness-based model (FITNET)
+lin_comb: 0.9                  # weight for the linear combination of the previous timestep and new q distributions (default: 0.9, i.e. mostly rely on the previous timestep distribution)
+ceiling: 0.1                   # ceiling for the step-size (default: 0.1, i.e. the step-size values are in [0,0.1+init_eta])
+adabw: False                   # If true uses adaptive bandwidth for lce computation else fixed bandwidth
+

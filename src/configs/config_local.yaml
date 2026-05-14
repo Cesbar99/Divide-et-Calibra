@@ -1,0 +1,108 @@
+defaults:
+  - _self_
+  - models: null
+  - dataset: null
+
+# These are placeholders that will be overridden
+#dataset2: null
+#models2: null
+
+####### VERSION 2 OF CALIBRATOR WITH SIMILARITY EMBEDDING #######
+calibrator_version: v2
+return_features: True # run calibration on features embeddings or logits
+similarity_dim: 50 #number of pca dimensions to use
+
+# Global parameters
+seeds: [42, 43, 44, 45, 46]  # [42, 123, 456, 789, 999] # for food, else: [42, 43, 44, 45, 46] 
+seed: 42
+stages: ['pretrain', 'quantize', 'calibrate', 'kernel_calibrate', 'competition']   
+resume_training: False
+offline: False
+device: cuda
+cuda_device: 0 #cuda 
+
+# Checkpoints
+checkpoint:  
+  seed: 42
+  temperature: 1.0
+  epochs: 10
+  epochs_bw: 60 # epochs of pre-trained local-net that outputs bandiwidths for each instance to use for lce computations
+  num_classes: 5 # for synthetic otherwise not accessed
+  num_features:  #10 for synthetic otherwise not accessed
+
+# main commands
+run_all: False
+pretrain: False
+test: False
+calibrate: True
+quantize: False
+replicate: False
+viz_and_test: False
+competition: False
+exp_name: 
+data: 'synthetic'
+calibration_method: "local_calibration"
+only_test: False
+corruption_type: 
+severity: 
+extract_embeddings: False
+
+# synthetic data model
+#init_logits_scaling: 1.
+
+# weight and bias
+wandb_entity: 
+wandb_project: calibration-experiments
+wandb_id:
+use_wandb: True
+
+# testing and calibration metrics
+n_bins_calibration_metrics: 15
+n_bins_esse: 15
+bin_strategy: # 'quantile' for same size bins or 'default' which uses probabilities theresholds (equivalent to uniform)
+gamma: 0.1 # bandwidth for LCE
+l2_plot: False # If true plots LCE vs L2 distance to centroids, else plots LCE vs effective sample size
+save_path_calibration_plots: 
+save_path_calibration_metrics: 
+save_path_boxplots: 
+
+# default behaviour for batch size
+batch_size_map:
+  pre-train: 32
+  calibrate: 1024 #512
+
+# default models for experiment
+models_map:
+  weather: weather_ftt
+  mnist: mnist_cnn
+  synthetic: mlp
+  tissue: tissue_vit #tissue_resnet50 #tissue_vit #tissue_convnext
+  path: path_densenet121 #path_resnet50 path_vit
+  cifar10: cifar10_resnet50 #cifar10_vit #cifar10_convnext
+  cifar10LT: cifar10LT_vit
+  cifar100: cifar100_resnet152 #cifar100_convnext #cifar100_vit #cifar100_densenet121 #cifar100_resnet50 #cifar100_resnet18 
+  food101: food101_resnet152 #food101_resnet50 food101_resnet152 food101_vit food101_densenet121 food101_resnet18 
+  covtype: covtype_resmlp #covtype_ftt
+  otto: otto_resmlp #otto_ftt 
+  cubic: cubic_resmlp #otto_ftt 
+
+# MAP FROM EPOCHS TO MODEL CLASSES
+# model_classes_map:
+#   9: ResNet
+#   5: ViT
+#   20: ConvNext
+#   50: FTT   
+
+# HP-optimisation
+use_optuna: False
+optuna_seed: 1234
+optuna_epochs: 30
+n_trials: 50
+multi_obj: False
+
+#competitors
+methods: ['TS', 'IR', 'PS', 'PC', 'DC', 'SMS'] #tempearature scaling, isotonic regression, platt scaling, dirichlet calibration
+method:
+gammas: [] #[0.1, 1., 5., 7., 10., 100.] #[0.1, 0.3, 1, 3, 5, 7, 10, 100]
+
+class_freqs: [.1, .1, .1, .1, .1, .1, .1, .1, .1, .1]

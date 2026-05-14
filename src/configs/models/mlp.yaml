@@ -1,0 +1,14 @@
+defaults:
+  - _self_
+
+model: mlp
+temperature: 1.0
+use_acc: True
+epochs: 30
+
+optimizer:
+  name: adam
+  lr: 1e-3 #1e-2
+  weight_decay: 0. #0.0001
+
+  

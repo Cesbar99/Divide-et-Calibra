@@ -1,0 +1,14 @@
+num_features : 
+num_classes : 10 # 10 classes but fixed no need to specify
+random_state : 42
+batch_size : # 1024 for calibration and 32 for pre-training
+variant: #'awgn', 'motion_blur', 'reduced_contrast'
+feature_dim: 2048 # Depnds on model used need to check it out!!!!!
+class_freqs: [.1, .1, .1, .1, .1, .1, .1, .1, .1, .1]
+#size: 224
+cal_n: 10000
+test_n: 25000
+gamma: 0.15
+scale: 1.0
+save_path: "cubic10_synth_cal10k_test25k_gamma015.npz"
+warp_type: 'cubic' # 'cubic' or 'sinusoidal'

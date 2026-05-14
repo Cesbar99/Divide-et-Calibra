@@ -1,0 +1,67 @@
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, classification_report
+import sys 
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import random as pyrandom
+import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger
+from algorithms.networks.networks import *
+from algorithms.trainers.trainers import *
+import hydra
+from hydra import initialize, compose
+from hydra.core.global_hydra import GlobalHydra
+from omegaconf import DictConfig, open_dict, OmegaConf
+import time
+from utils.utils import *
+from data_sets.dataset import *
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
+from actions.test import test
+from tqdm import tqdm
+import optuna
+from optuna.samplers import NSGAIISampler
+from hp_opt.hp_opt import *
+from imagecorruptions import corrupt #corrupt_batch
+from types import SimpleNamespace
+
+kwargs = SimpleNamespace(batch_size=256)
+
+X_train, y_train, X_val, y_val, X_train_cal, y_train_cal, X_eval_cal, y_eval_cal, X_eval_cal_shift, y_eval_cal_shift = WeatherData(kwargs, experiment='xg_debug', name='weather', seed=42)
+
+# number of classes
+num_classes = len(set(y_train))
+
+model = XGBClassifier(
+    objective='multi:softprob',
+    num_class=num_classes,
+    eval_metric='mlogloss',
+
+    # good starting defaults
+    n_estimators=500,
+    learning_rate=0.05,
+    max_depth=6,
+    subsample=0.8,
+    colsample_bytree=0.8,
+
+    tree_method='hist',  # fast
+    random_state=42,
+)
+
+# train with validation monitoring
+model.fit(
+    X_train, y_train,
+    eval_set=[(X_val, y_val)],
+    verbose=True
+)
+
+# predictions
+y_pred = model.predict(X_eval_cal)
+
+# evaluation
+acc = accuracy_score(y_eval_cal, y_pred)
+print(f"\nEval accuracy: {acc:.4f}")
+
+print("\nClassification report:")
+print(classification_report(y_eval_cal, y_pred))
+

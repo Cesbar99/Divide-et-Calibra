@@ -1,0 +1,9 @@
+num_features : 10
+num_classes : 5
+num_samples : 120000 
+n_redundant : 0
+n_clusters_per_class : 1
+class_sep : 0.5
+flip_y : 0.1
+random_state : 42
+batch_size : #1024 for calibration and 32 for pre-training

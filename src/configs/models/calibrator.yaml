@@ -1,0 +1,43 @@
+defaults:
+  - _self_
+
+model: calibrator
+data_name: 'otto'
+
+optimizer:
+  name: adam #sgd #adam #adam
+  lr: 1e-3 #0.1 #1e-3
+  weight_decay: 0. #0.0001
+
+loss:
+  name: #focal
+  gamma: 2
+  
+# calibration hyper-parameters                                                                                                                                                                                        
+log_var_initializer: 1.    # Control initial variance. Default 10. Used 6 for convnext. In general less classes -> smaller values. If sampling is true set to small values to initialize encodings close to inputs   #   
+hidden_dim: 256            # Size of hidden layer of calibrating net                                                                                                     #
+alpha1: 15.                # Classification contraint penalty                                                                                                            #
+alpha2: 0.                 # Switch-off variance penalty                                                                                                                 #
+lambda_kl: 10.             # KL-divergence hyperparameter                                                                                                                #
+entropy_factor: 0.         # Control peakness of entropy of model confidence.                                                                                            #
+epochs: 100                # Number of epochs                                                                                                                            #
+noise: 0.                  # Std of normal distribution to sample noise to add to input logits to improve generalisation                                                 #
+smoothing: 0.              # Random label-smootihng parameter to improve on sparse data (many classes -> more sparse matrices!) 4.5e-2                                   #
+logits_scaling: 1.         # Scaling logits to make softmax more picked for stable gumbel-softmax sampling of argmax to ensure calssification constraint                 #
+sampling: False            # If true uses parametrised varances to to add noise to latent representations via reparametrisation trick                                    #
+use_empirical_freqs: True  # If true computes cross-entropy with empirical frequencies about of each point in place else uses softmax of new latent encodings            #
+predict_labels: True       # If true computes cross-entropy with true labels else uses predicted labels of frozen model                                                  #
+js_distance: True          # If true copmutes JS distance in place of kl divergence between model scroes and kernel estimates                                            #
+interpolation_epochs: 0.   # Number of epochs for lambda_kl to drop to alpha1. To not interolate set as 0                                                                #
+dropout: 0.1               # Dropout to regularize calibrator
+
+augment: False             # If true uses data augmentation during training of calibrator
+adabw: False              # If true uses adaptive bandwidth for lce computation else fixed bandwidth
+fixed_var: False
+linearly_combine_pca: False  # If true learns a linear combination of pca components to add to similarity embeddings else adds pca components directly
+
+kernel_only: False        # If true uses only kernel density estimates for calibration else combines with base model predictions
+
+alpha_sim: 1.0          # Initial similarity scaling factor if linearly_combine_pca is true
+alpha_cls: 1.0          # Initial class scaling factor if linearly_combine_pca is true
+
