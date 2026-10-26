@@ -45,6 +45,7 @@ calibration_method: "local_calibration"
 only_test: False
 corruption_type: 
 severity: 
+only_ecce_mad: False
 extract_embeddings: False
 
 # synthetic data model
@@ -62,9 +63,9 @@ n_bins_esse: 15
 bin_strategy: # 'quantile' for same size bins or 'default' which uses probabilities theresholds (equivalent to uniform)
 gamma: 0.1 # bandwidth for LCE
 l2_plot: False # If true plots LCE vs L2 distance to centroids, else plots LCE vs effective sample size
-save_path_calibration_plots: 
-save_path_calibration_metrics: 
-save_path_boxplots: 
+save_path_calibration_plots: /home/barbera/calibration/localibration/results/plots
+save_path_calibration_metrics: /home/barbera/calibration/localibration/results/metrics
+save_path_boxplots: /home/barbera/calibration/localibration/results/boxplots
 
 # default behaviour for batch size
 batch_size_map:

@@ -5,7 +5,10 @@ import torch
 import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from utils.utils import *
+from utils.selective_prediction import test_ as selective_prediction_test
+from utils.conformal_prediction import test_ as conformal_prediction_test
 import matplotlib.ticker as mticker
+
 
 def test(kwargs):
     class_freqs = kwargs.dataset.class_freqs
@@ -217,16 +220,47 @@ def test(kwargs):
             probs_cal = F.softmax(logits_cal_, dim=1)
 
             # Compute calibration metrics
-            ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
-            results = {
-                "ECCE": [ecce_test],       
-                "ECE": [ece_test],
-                "MCE": [mce_test],
-                "Brier": [brier_test],
-                "NLL": [nll_test],
-                "LCE": [lce_test],
-                "MLCE": [mlce_test]
-            }
+            if kwargs.only_ecce_mad:
+                worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                results = {                    
+                    "ECCE-MAD": [worst_ecce_mad.item()]
+                }
+                appendix += '_only_ecce_mad'
+            else:
+                ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                results = {
+                    "ECCE": [ecce_test],
+                    "ECCE-MAD": [worst_ecce_mad.item()],
+                    "ECE": [ece_test],
+                    "MCE": [mce_test],
+                    "Brier": [brier_test],
+                    "NLL": [nll_test],
+                    "LCE": [lce_test],
+                    "MLCE": [mlce_test]
+                }
+            # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+            # worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+            # results = {
+            #     "ECCE": [ecce_test],
+            #     "ECCE-MAD": [worst_ecce_mad.item()],
+            #     "ECE": [ece_test],
+            #     "MCE": [mce_test],
+            #     "Brier": [brier_test],
+            #     "NLL": [nll_test],
+            #     "LCE": [lce_test],
+            #     "MLCE": [mlce_test]
+            # }
+            # results = {
+            #     "ECCE": [ecce_test],       
+            #     "ECE": [ece_test],
+            #     "MCE": [mce_test],
+            #     "Brier": [brier_test],
+            #     "NLL": [nll_test],
+            #     "LCE": [lce_test],
+            #     "MLCE": [mlce_test]
+            # }
 
             # Convert to DataFrame
             df = pd.DataFrame(results)
@@ -239,25 +273,29 @@ def test(kwargs):
             # Save to CSV
             df.to_csv(output_file, index=False)  
             
-            # ---- Save aggregated ESS profile ----
-            ess_results = {
-                "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
-                "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
-                "avg_ess": ess_profile["avg_ess_per_bin"],
-                "count": ess_profile["count_per_bin"]
-            }
+            if kwargs.only_ecce_mad:
+                print(f"Test Calibration — ECCE-MAD: {worst_ecce_mad:.4f}")
+            else:
+            
+                # ---- Save aggregated ESS profile ----
+                ess_results = {
+                    "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
+                    "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
+                    "avg_ess": ess_profile["avg_ess_per_bin"],
+                    "count": ess_profile["count_per_bin"]
+                }
 
-            df_ess = pd.DataFrame(ess_results)
+                df_ess = pd.DataFrame(ess_results)
 
-            ess_output_file = os.path.join(
-                output_dir,
-                f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
-            )
+                ess_output_file = os.path.join(
+                    output_dir,
+                    f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
+                )
 
-            df_ess.to_csv(ess_output_file, index=False)
-            print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")                
-            multiclass_calibration_plot(y_true_test_, probs_test, n_bins=n_bins, save_path=save_path, filename=test_file_name)
-            #multiclass_calibration_plot(y_true_cal_, probs_cal, n_bins=n_bins, save_path=save_path, filename=cal_file_name)
+                df_ess.to_csv(ess_output_file, index=False)
+                print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")                
+                multiclass_calibration_plot(y_true_test_, probs_test, n_bins=n_bins, save_path=save_path, filename=test_file_name)
+                #multiclass_calibration_plot(y_true_cal_, probs_cal, n_bins=n_bins, save_path=save_path, filename=cal_file_name)
             
     elif kwargs.exp_name == 'quantize':
          
@@ -274,6 +312,9 @@ def test(kwargs):
         n_bins_esse = kwargs.n_bins_esse
         gamma = kwargs.gamma             
         name = kwargs.exp_name
+        if str(kwargs.models.optimizer.name).lower() == "lbfgs":
+            name += '_LBFGS'
+            print('\nTESTING LBFGS OPTIMIZER\n')
         if kwargs.models.S != 64:
             name += f'slot-{kwargs.models.S}'
         if kwargs.models.K != 64:
@@ -284,10 +325,22 @@ def test(kwargs):
             name += '_L1'       
         if kwargs.models.quantization_only: 
             name += '_quantonly' 
+        if kwargs.models.finetune_only: 
+            name += '_finetuneonly'
         if kwargs.models.standard_dirichlet:
             name += '_stdcal'    
         if kwargs.models.quadratic:
             name += '_quadratic'
+        if kwargs.models.diag:
+            name += '_diag'
+        if kwargs.models.random_shuffle:
+            name += '_shuffle'    
+        if kwargs.models.random_partition:
+            name += '_randompart'
+        if kwargs.models.normal_random_partition:
+            name += '_randompartnormal'
+        if  kwargs.models.fixed_classifier:
+            name += '_fixedclass'
             
         if kwargs.data == 'synthetic':
             appendix = name + '_' + to_add + '_' + f'{kwargs.checkpoint.num_classes}_classes_' + f'{kwargs.checkpoint.num_features}_features'
@@ -389,11 +442,24 @@ def test(kwargs):
         # ================================
         
         # === standard deviation of learned region dependent calibration parameters ===
+        # alpha_test = df_test.filter(regex=r'^alpha')
+        # alpha_test_ = torch.tensor(alpha_test.values, dtype=torch.float32)
+        
+        # alpha_std = torch.std(alpha_test_, dim=0)
+        # alpha_mean = torch.mean(alpha_test_, dim=0)
+                
         alpha_test = df_test.filter(regex=r'^alpha')
         alpha_test_ = torch.tensor(alpha_test.values, dtype=torch.float32)
         
         alpha_std = torch.std(alpha_test_, dim=0)
-        alpha_mean = torch.mean(alpha_test_, dim=0)
+        alpha_mean = torch.mean(alpha_test_, dim=0)        
+        
+        print("\n=== Standard deviation of learned region-dependent calibration parameters ===")
+        #print(f"{alpha_std.item():.6f}")
+        #print('\n')
+        for i in range(alpha_std.shape[0]):
+            print(f"Class {i}:  mean = {alpha_mean[i].item():.4f},  std = {alpha_std[i].item():.4f}, cv = {alpha_std[i].item() / (alpha_mean[i].item() + 1e-12):.4f}")                        
+        print('\n')
         
         if not kwargs.only_test:             
             # Extract logits and true labels
@@ -415,17 +481,26 @@ def test(kwargs):
                 bw_test = torch.tensor(bw_test.values, dtype=torch.float32).squeeze() 
                 ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test = compute_multiclass_calibration_metrics_w_lce_adabw(probs_test, y_true_test_, pca_test_, bw_test, n_bins, gamma=gamma, bin_strategy=kwargs.bin_strategy) 
             else:
-                ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
-                # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
-                results = {
-                    "ECCE": [ecce_test],
-                    "ECE": [ece_test],
-                    "MCE": [mce_test],
-                    "Brier": [brier_test],
-                    "NLL": [nll_test],
-                    "LCE": [lce_test],
-                    "MLCE": [mlce_test]
-                }
+                if kwargs.only_ecce_mad:
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                    results = {                    
+                        "ECCE-MAD": [worst_ecce_mad.item()]
+                    }
+                    appendix += '_only_ecce_mad'
+                else:
+                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                    results = {
+                        "ECCE": [ecce_test],
+                        "ECCE-MAD": [worst_ecce_mad.item()],
+                        "ECE": [ece_test],
+                        "MCE": [mce_test],
+                        "Brier": [brier_test],
+                        "NLL": [nll_test],
+                        "LCE": [lce_test],
+                        "MLCE": [mlce_test]
+                    }
 
                 # Convert to DataFrame
                 df = pd.DataFrame(results)
@@ -437,27 +512,32 @@ def test(kwargs):
 
                 # Save to CSV
                 df.to_csv(output_file, index=False)
+                print('saving metrics to ', output_file)
+                
+                if kwargs.only_ecce_mad:
+                    print(f"Test Calibration — ECCE-MAD: {worst_ecce_mad:.4f}")
+                else:
 
-                # ---- Save aggregated ESS profile ----
-                ess_results = {
-                    "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
-                    "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
-                    "avg_ess": ess_profile["avg_ess_per_bin"],
-                    "count": ess_profile["count_per_bin"]
-                }
+                    # ---- Save aggregated ESS profile ----
+                    ess_results = {
+                        "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
+                        "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
+                        "avg_ess": ess_profile["avg_ess_per_bin"],
+                        "count": ess_profile["count_per_bin"]
+                    }
 
-                df_ess = pd.DataFrame(ess_results)
+                    df_ess = pd.DataFrame(ess_results)
 
-                ess_output_file = os.path.join(
-                    output_dir,
-                    f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
-                )
+                    ess_output_file = os.path.join(
+                        output_dir,
+                        f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
+                    )
 
-                df_ess.to_csv(ess_output_file, index=False)
+                    df_ess.to_csv(ess_output_file, index=False)
 
-                # Save to CSV
-                df.to_csv(output_file, index=False)
-                print(f"Test Quantisation — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")
+                    # Save to CSV
+                    df.to_csv(output_file, index=False)
+                    print(f"Test Quantisation — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")
             #else:
                 all_lce = []
                 all_mlce = []
@@ -493,10 +573,10 @@ def test(kwargs):
             to_add = kwargs.data + '_' + 'shift' + '_calsize_' + f'{kwargs.dataset.subsample}'
         else:
             to_add = kwargs.data + '_calsize_' + f'{kwargs.dataset.subsample}'
-        if kwargs.calibrate:
-            total_epochs = kwargs.models.epochs
-        else:
-            total_epochs =  kwargs.checkpoint.epochs
+        # if kwargs.calibrate:
+        total_epochs = kwargs.models.epochs
+        # else:
+        #     total_epochs =  kwargs.checkpoint.epochs
         n_bins = kwargs.n_bins_calibration_metrics  
         n_bins_esse = kwargs.n_bins_esse
         gamma = kwargs.gamma              
@@ -533,7 +613,7 @@ def test(kwargs):
                         total_epochs,                
                         model_class
                     )
-                if kwargs.models.lambda_kl == 0:
+                if kwargs.models.lambda_kl == 0:                    
                     test_results = "results/{}/{}_{}_classes_{}_features/raw_results_test_cal_corrupt_{}_seed-{}_ep-{}_{}.csv".format(
                         'reference_kernel',
                         kwargs.data,
@@ -579,6 +659,8 @@ def test(kwargs):
                 piece = f"raw_results_test_cal_seed-{kwargs.seed}_ep-{total_epochs}_{model_class}.csv"
                 if kwargs.data == 'weather' and kwargs.dataset.shift:
                     piece = f"raw_results_test_cal_shift_seed-{kwargs.seed}_ep-{total_epochs}_{model_class}.csv"  
+                if kwargs.data == 'cifar100' and kwargs.models.lambda_kl == 0:
+                    piece = f"raw_results_test_cal_seed-{kwargs.seed}_ep-{total_epochs}.csv"
                 test_results = root + piece   
 
                    
@@ -619,11 +701,20 @@ def test(kwargs):
                 bw_test = df_test.filter(regex=r'^bandwidth')
                 bw_test = torch.tensor(bw_test.values, dtype=torch.float32).squeeze() 
                 ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test = compute_multiclass_calibration_metrics_w_lce_adabw(probs_test, y_true_test_, pca_test_, bw_test, n_bins, gamma=gamma, bin_strategy=kwargs.bin_strategy) 
-            else:
-                if kwargs.calibrate:
-                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+            else:                
+                if kwargs.only_ecce_mad:
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                    results = {                    
+                        "ECCE-MAD": [worst_ecce_mad.item()]
+                    }
+                    appendix += '_only_ecce_mad'
+                else:
+                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
                     results = {
-                        "ECCE": [ecce_test],       
+                        "ECCE": [ecce_test],
+                        "ECCE-MAD": [worst_ecce_mad.item()],
                         "ECE": [ece_test],
                         "MCE": [mce_test],
                         "Brier": [brier_test],
@@ -631,18 +722,42 @@ def test(kwargs):
                         "LCE": [lce_test],
                         "MLCE": [mlce_test]
                     }
+                # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                # worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                # results = {
+                #     "ECCE": [ecce_test],
+                #     "ECCE-MAD": [worst_ecce_mad.item()],
+                #     "ECE": [ece_test],
+                #     "MCE": [mce_test],
+                #     "Brier": [brier_test],
+                #     "NLL": [nll_test],
+                #     "LCE": [lce_test],
+                #     "MLCE": [mlce_test]
+                # }
+                # results = {
+                #     "ECCE": [ecce_test],       
+                #     "ECE": [ece_test],
+                #     "MCE": [mce_test],
+                #     "Brier": [brier_test],
+                #     "NLL": [nll_test],
+                #     "LCE": [lce_test],
+                #     "MLCE": [mlce_test]
+                # }
 
-                    # Convert to DataFrame
-                    df = pd.DataFrame(results)
+                # Convert to DataFrame
+                df = pd.DataFrame(results)
 
-                    # Specify your directory and filename
-                    output_dir = join(kwargs.save_path_calibration_metrics, appendix)
-                    os.makedirs(output_dir, exist_ok=True)
-                    output_file = os.path.join(output_dir, f'metrics_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
+                # Specify your directory and filename
+                output_dir = join(kwargs.save_path_calibration_metrics, appendix)
+                os.makedirs(output_dir, exist_ok=True)
+                output_file = os.path.join(output_dir, f'metrics_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
 
-                    # Save to CSV
-                    df.to_csv(output_file, index=False)  
-                    
+                # Save to CSV
+                df.to_csv(output_file, index=False)  
+                
+                if kwargs.only_ecce_mad:
+                    print(f"Test Calibration — ECCE-MAD: {worst_ecce_mad:.4f}")
+                else:
                     # ---- Save aggregated ESS profile ----
                     ess_results = {
                         "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
@@ -664,72 +779,72 @@ def test(kwargs):
                     
                     # Print results
                     print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
-                else:    
-                    all_lce = []
-                    all_mlce = []                
-                    for gamma in kwargs.gammas:
-                        print(f'Computing metrics with gamma {gamma}')
-                        ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
-                        all_lce.append(lce_test)
-                        all_mlce.append(mlce_test)
-                        if gamma == kwargs.gamma:
-                            results = {
-                                "ECCE": [ecce_test],       
-                                "ECE": [ece_test],
-                                "MCE": [mce_test],
-                                "Brier": [brier_test],
-                                "NLL": [nll_test],
-                                "LCE": [lce_test],
-                                "MLCE": [mlce_test]
-                            }
+                
+                all_lce = []
+                all_mlce = []                
+                for gamma in kwargs.gammas:
+                    print(f'Computing metrics with gamma {gamma}')
+                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    all_lce.append(lce_test)
+                    all_mlce.append(mlce_test)
+                    if gamma == kwargs.gamma:
+                        results = {
+                            "ECCE": [ecce_test],       
+                            "ECE": [ece_test],
+                            "MCE": [mce_test],
+                            "Brier": [brier_test],
+                            "NLL": [nll_test],
+                            "LCE": [lce_test],
+                            "MLCE": [mlce_test]
+                        }
 
-                            # Convert to DataFrame
-                            df = pd.DataFrame(results)
+                        # Convert to DataFrame
+                        df = pd.DataFrame(results)
 
-                            # Specify your directory and filename
-                            output_dir = join(kwargs.save_path_calibration_metrics, appendix)
-                            os.makedirs(output_dir, exist_ok=True)
-                            output_file = os.path.join(output_dir, f'metrics_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
+                        # Specify your directory and filename
+                        output_dir = join(kwargs.save_path_calibration_metrics, appendix)
+                        os.makedirs(output_dir, exist_ok=True)
+                        output_file = os.path.join(output_dir, f'metrics_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
 
-                            # Save to CSV
-                            df.to_csv(output_file, index=False)  
-                            
-                            # ---- Save aggregated ESS profile ----
-                            ess_results = {
-                                "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
-                                "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
-                                "avg_ess": ess_profile["avg_ess_per_bin"],
-                                "count": ess_profile["count_per_bin"]
-                            }
+                        # Save to CSV
+                        df.to_csv(output_file, index=False)  
+                        
+                        # ---- Save aggregated ESS profile ----
+                        ess_results = {
+                            "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
+                            "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
+                            "avg_ess": ess_profile["avg_ess_per_bin"],
+                            "count": ess_profile["count_per_bin"]
+                        }
 
-                            df_ess = pd.DataFrame(ess_results)
+                        df_ess = pd.DataFrame(ess_results)
 
-                            ess_output_file = os.path.join(
-                                output_dir,
-                                f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
-                            )
-                            
-                            df_ess.to_csv(ess_output_file, index=False)
-                            
-                            # Print results
-                            print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
-                    
-                    gamma_plot = {
-                        'GAMMA': kwargs.gammas,
-                        'LCE': all_lce,
-                        'MLCE': all_mlce
-                    }
-                    
-                    # Convert to DataFrame
-                    df = pd.DataFrame(gamma_plot)
+                        ess_output_file = os.path.join(
+                            output_dir,
+                            f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
+                        )
+                        
+                        df_ess.to_csv(ess_output_file, index=False)
+                        
+                        # Print results
+                        print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
+                
+                gamma_plot = {
+                    'GAMMA': kwargs.gammas,
+                    'LCE': all_lce,
+                    'MLCE': all_mlce
+                }
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(gamma_plot)
 
-                    # Specify your directory and filename
-                    output_dir = join(kwargs.save_path_calibration_metrics, appendix)
-                    os.makedirs(output_dir, exist_ok=True)
-                    output_file = os.path.join(output_dir, f'gamma_plot_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
+                # Specify your directory and filename
+                output_dir = join(kwargs.save_path_calibration_metrics, appendix)
+                os.makedirs(output_dir, exist_ok=True)
+                output_file = os.path.join(output_dir, f'gamma_plot_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv') #'metric_' + appendix +
 
-                    # Save to CSV
-                    df.to_csv(output_file, index=False)                                                             
+                # Save to CSV
+                df.to_csv(output_file, index=False)                                                             
                     
             print("probs_test min/max:", probs_test.min().item(), probs_test.max().item())
             # Calibration plot        
@@ -776,6 +891,10 @@ def test(kwargs):
                         model_class
                     )
             else:
+                if (kwargs.method in ['TS', 'PS', 'PC', 'IR']) and (model_class == 'resnet') and (kwargs.checkpoint.epochs == 9):
+                    max_iters = 500                                    
+                else:
+                    max_iters = kwargs.models.max_iter
                 test_results = "results/{}_{}/{}_{}_classes_{}_features/raw_results_test_cal_seed-{}_ep-{}_{}.csv".format(
                             kwargs.exp_name,
                             kwargs.method,
@@ -783,9 +902,10 @@ def test(kwargs):
                             kwargs.dataset.num_classes,
                             kwargs.dataset.num_features,
                             kwargs.seed,
-                            kwargs.models.max_iter,                
+                            max_iters,                
                             model_class
                         )
+                print(f"Loading test results from {test_results}")
         
         # Load your data
         df_test = pd.read_csv(test_results)        
@@ -834,18 +954,49 @@ def test(kwargs):
                 bw_test = df_bw.filter(regex=r'^bandwidth')
                 bw_test = torch.tensor(bw_test.values, dtype=torch.float32).squeeze() 
                 ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test = compute_multiclass_calibration_metrics_w_lce_adabw(probs_test, y_true_test_, pca_test_, bw_test, n_bins, gamma=gamma, bin_strategy=kwargs.bin_strategy) 
-            else:                               
-                ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+            else:                  
+                if kwargs.only_ecce_mad:
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                    results = {                    
+                        "ECCE-MAD": [worst_ecce_mad.item()]
+                    }
+                    appendix += '_only_ecce_mad'
+                else:
+                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                    results = {
+                        "ECCE": [ecce_test],
+                        "ECCE-MAD": [worst_ecce_mad.item()],
+                        "ECE": [ece_test],
+                        "MCE": [mce_test],
+                        "Brier": [brier_test],
+                        "NLL": [nll_test],
+                        "LCE": [lce_test],
+                        "MLCE": [mlce_test]
+                    }             
+                # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                # worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                # results = {
+                #     "ECCE": [ecce_test],
+                #     "ECCE-MAD": [worst_ecce_mad.item()],
+                #     "ECE": [ece_test],
+                #     "MCE": [mce_test],
+                #     "Brier": [brier_test],
+                #     "NLL": [nll_test],
+                #     "LCE": [lce_test],
+                #     "MLCE": [mlce_test]
+                # }
             
-                results = {
-                    "ECCE": [ecce_test],       
-                    "ECE": [ece_test],
-                    "MCE": [mce_test],
-                    "Brier": [brier_test],
-                    "NLL": [nll_test],
-                    "LCE": [lce_test],
-                    "MLCE": [mlce_test]
-                }
+                # results = {
+                #     "ECCE": [ecce_test],       
+                #     "ECE": [ece_test],
+                #     "MCE": [mce_test],
+                #     "Brier": [brier_test],
+                #     "NLL": [nll_test],
+                #     "LCE": [lce_test],
+                #     "MLCE": [mlce_test]
+                # }
 
                 # Convert to DataFrame
                 df = pd.DataFrame(results)
@@ -858,52 +1009,55 @@ def test(kwargs):
                 # Save to CSV
                 df.to_csv(output_file, index=False)   
                 
-                # ---- Save aggregated ESS profile ----
-                ess_results = {
-                    "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
-                    "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
-                    "avg_ess": ess_profile["avg_ess_per_bin"],
-                    "count": ess_profile["count_per_bin"]
-                }
+                if kwargs.only_ecce_mad:
+                    print(f"Test Calibration — ECCE-MAD: {worst_ecce_mad:.4f}")
+                else:
+                    # ---- Save aggregated ESS profile ----
+                    ess_results = {
+                        "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
+                        "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
+                        "avg_ess": ess_profile["avg_ess_per_bin"],
+                        "count": ess_profile["count_per_bin"]
+                    }
 
-                df_ess = pd.DataFrame(ess_results)
+                    df_ess = pd.DataFrame(ess_results)
 
-                ess_output_file = os.path.join(
-                    output_dir,
-                    f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
-                )
-                
-                df_ess.to_csv(ess_output_file, index=False)
-                
-                # Print results
-                print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
+                    ess_output_file = os.path.join(
+                        output_dir,
+                        f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
+                    )
+                    
+                    df_ess.to_csv(ess_output_file, index=False)
+                    
+                    # Print results
+                    print(f"Test Calibration — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
                     
                 all_lce = []
                 all_mlce = []
                 for gamma in kwargs.gammas:
                     print(f'Computing metrics with gamma {gamma}')     
-                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                    ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
                     all_lce.append(lce_test)
                     all_mlce.append(mlce_test)
 
-                    if gamma != kwargs.gamma:
-                        
-                        gamma_plot = {
-                            'GAMMA': kwargs.gammas,
-                            'LCE': all_lce,
-                            'MLCE': all_mlce
-                        }
-                        
-                        # Convert to DataFrame
-                        df = pd.DataFrame(gamma_plot)
+                # if gamma != kwargs.gamma:
+                    
+                gamma_plot = {
+                    'GAMMA': kwargs.gammas,
+                    'LCE': all_lce,
+                    'MLCE': all_mlce
+                }
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(gamma_plot)
 
-                        # Specify your directory and filename
-                        output_dir = join(kwargs.save_path_calibration_metrics, appendix)
-                        os.makedirs(output_dir, exist_ok=True)
-                        output_file = os.path.join(output_dir, f'gamma_plot_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_corrupt_{corruption_text}_seed_{kwargs.seed}_{model_class}.csv') #'metric_' + appendix +
+                # Specify your directory and filename
+                output_dir = join(kwargs.save_path_calibration_metrics, appendix)
+                os.makedirs(output_dir, exist_ok=True)
+                output_file = os.path.join(output_dir, f'gamma_plot_{kwargs.bin_strategy}_adabw_{kwargs.models.adabw}_corrupt_{corruption_text}_seed_{kwargs.seed}_{model_class}.csv') #'metric_' + appendix +
 
-                        # Save to CSV
-                        df.to_csv(output_file, index=False)                                   
+                # Save to CSV
+                df.to_csv(output_file, index=False)                                   
             
             # Calibration plot            
             multiclass_calibration_plot(y_true_test_, probs_test, n_bins=n_bins, save_path=save_path, filename=test_file_name, bin_strategy=kwargs.bin_strategy)                
@@ -999,16 +1153,47 @@ def test(kwargs):
                             "NLL": [nll_test]                            
                         }
                     else:
-                        ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
-                        results = {
-                            "ECCE": [ecce_test],       
-                            "ECE": [ece_test],
-                            "MCE": [mce_test],
-                            "Brier": [brier_test],
-                            "NLL": [nll_test],
-                            "LCE": [lce_test],
-                            "MLCE": [mlce_test]
-                        }
+                        if kwargs.only_ecce_mad:
+                            worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                            results = {                    
+                                "ECCE-MAD": [worst_ecce_mad.item()]
+                            }
+                            appendix += '_only_ecce_mad'
+                        else:
+                            ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_,class_freqs, n_bins, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class) #compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                            # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile, l2_profile = compute_multiclass_calibration_metrics_w_lce_quantv2(probs_test, y_true_test_, pca_test_, l2_test_,class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                            worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                            results = {
+                                "ECCE": [ecce_test],
+                                "ECCE-MAD": [worst_ecce_mad.item()],
+                                "ECE": [ece_test],
+                                "MCE": [mce_test],
+                                "Brier": [brier_test],
+                                "NLL": [nll_test],
+                                "LCE": [lce_test],
+                                "MLCE": [mlce_test]
+                            }
+                        # ecce_test, ece_test, mce_test, brier_test, nll_test, lce_test, mlce_test, ess_profile = compute_multiclass_calibration_metrics_w_lce(probs_test, y_true_test_, pca_test_, class_freqs, n_bins, n_bins_esse, gamma=kwargs.gamma, bin_strategy=kwargs.bin_strategy, data=kwargs.data, model_type=model_class)
+                        # worst_ecce_mad, ecce_mad_for_each_class = compute_classwise_ecce_mad(probs_test, y_true_test_)
+                        # results = {
+                        #     "ECCE": [ecce_test],
+                        #     "ECCE-MAD": [worst_ecce_mad.item()],
+                        #     "ECE": [ece_test],
+                        #     "MCE": [mce_test],
+                        #     "Brier": [brier_test],
+                        #     "NLL": [nll_test],
+                        #     "LCE": [lce_test],
+                        #     "MLCE": [mlce_test]
+                        # }
+                        # results = {
+                        #     "ECCE": [ecce_test],       
+                        #     "ECE": [ece_test],
+                        #     "MCE": [mce_test],
+                        #     "Brier": [brier_test],
+                        #     "NLL": [nll_test],
+                        #     "LCE": [lce_test],
+                        #     "MLCE": [mlce_test]
+                        # }
 
                     # Convert to DataFrame
                     df = pd.DataFrame(results)
@@ -1021,28 +1206,32 @@ def test(kwargs):
                     # Save to CSV
                     df.to_csv(output_file, index=False)  
                     
-                    # ---- Save aggregated ESS profile ----
-                    ess_results = {
-                        "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
-                        "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
-                        "avg_ess": ess_profile["avg_ess_per_bin"],
-                        "count": ess_profile["count_per_bin"]
-                    }
-
-                    df_ess = pd.DataFrame(ess_results)
-
-                    ess_output_file = os.path.join(
-                        output_dir,
-                        f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
-                    )
-                    
-                    df_ess.to_csv(ess_output_file, index=False)
-                    
-                    # Print results
-                    if kwargs.data == 'cubic':
-                        print(f"Test Replicator — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}") #, LCE: {lce_test:.4f}, MLCE: {mlce_test:.4f}")        
+                    if kwargs.only_ecce_mad:
+                        print(f"Test Calibration — ECCE-MAD: {worst_ecce_mad:.4f}")
                     else:
-                        print(f"Test Replicator — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
+                    
+                        # ---- Save aggregated ESS profile ----
+                        ess_results = {
+                            "ess_bin": list(range(len(ess_profile["avg_abs_lce_per_ess_bin"]))),
+                            "avg_abs_lce": ess_profile["avg_abs_lce_per_ess_bin"],
+                            "avg_ess": ess_profile["avg_ess_per_bin"],
+                            "count": ess_profile["count_per_bin"]
+                        }
+
+                        df_ess = pd.DataFrame(ess_results)
+
+                        ess_output_file = os.path.join(
+                            output_dir,
+                            f"ess_profile_seed_{kwargs.seed}_corrupt_{corruption_text}_{model_class}.csv"
+                        )
+                        
+                        df_ess.to_csv(ess_output_file, index=False)
+                        
+                        # Print results
+                        if kwargs.data == 'cubic':
+                            print(f"Test Replicator — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}") #, LCE: {lce_test:.4f}, MLCE: {mlce_test:.4f}")        
+                        else:
+                            print(f"Test Replicator — ECCE: {ecce_test:.4f}, ECE: {ece_test:.4f}, MCE: {mce_test:.4f}, Brier: {brier_test:.4f}, NLL: {nll_test:.4f}, LCE: {lce_test:.4f}") #, MLCE: {mlce_test:.4f}")        
                  
                     all_lce = []
                     all_mlce = []       
@@ -1207,13 +1396,13 @@ def test(kwargs):
         print(output_dir)
         result_slots.to_csv(os.path.join(output_dir, f"ablate_slots_tissue.csv"), index=False)
         result_kappa.to_csv(os.path.join(output_dir, f"ablate_kappas_tissue.csv"), index=False)
-        print(f"\nSaved ablation of S and K results for tissue to {output_dir}")
+        print(f"\nSaved ablation of S and K results for tissue to {output_dir}")           
         
     elif kwargs.exp_name == 'convnext_results':
         method_names = ['VQ', 'LCN', 'RK', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
         data_names = ['cifar10', 'cifar100', 'tissue'] #, 'weather', 'weather_shift'] # ['tissue'] 
         model_class = 'vit' #'resnet' #'convnext' #'resnet'
-        dir = 
+        dir = '/home/barbera/calibration/localibration/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
 
         for data_name in data_names:
             reusults_tables = []
@@ -1277,7 +1466,7 @@ def test(kwargs):
     
     elif kwargs.exp_name == 'ablate_vq':
         method_names = ['VQ', 'VQ-DC', 'VQ-NC', 'NC']
-        data_names = ['tissue', 'weather']
+        data_names = ['cifar10', 'cifar100'] #['tissue', 'weather']
                 
         for data_name in data_names:
             reusults_tables = []
@@ -1676,16 +1865,16 @@ def test(kwargs):
             print(f"Saved: {output_path}")
             
     elif kwargs.exp_name == 'box_plots': 
-        output_path = os.path.join('REPLACE', "box_plots/")       
+        output_path = os.path.join('/home/barbera/calibration/localibration/results/metrics_boxplot/', "box_plots/")       
         os.makedirs(output_path, exist_ok=True)
         
-        base_folder = 'REPLACE'
+        base_folder = '/home/barbera/calibration/localibration/results/metrics_boxplot/'
         methods = ['VQ', 'LN', 'KC', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
         seeds = [42, 43, 44, 45, 46]
         datasets = ['cifar10', 'cifar100', 'tissue']
         df = get_df_boxplots(base_folder, methods, seeds, datasets)
 
-        metrics = ["LCE", "MLCE"]
+        metrics = ["ECCE", "NLL"] #["LCE", "MLCE"]
 
         plt.rcParams.update({
                 'figure.dpi': 300,  # high resolution
@@ -1778,9 +1967,9 @@ def test(kwargs):
             ax.yaxis.set_major_formatter(fmt)
             ax.yaxis.get_offset_text().set_visible(True)
             if j == 0:
-                        ax.set_ylabel("$LCE$")
+                        ax.set_ylabel("$ECCE$") #ax.set_ylabel("$LCE$")
             elif j == 3:
-                        ax.set_ylabel("$MLCE$")
+                        ax.set_ylabel("$NLL$") #ax.set_ylabel("$MLCE$")
 
             for spine in ax.spines.values():
                 spine.set_visible(True)
@@ -1791,7 +1980,8 @@ def test(kwargs):
         g.fig.canvas.draw()                 # important: compute ticklabel sizes
         g.fig.align_ylabels(g.axes[:, 0])
 
-        plt.savefig(output_path+"box_plots.pdf", format="pdf", bbox_inches='tight', dpi=300)
+        filename = "box_plots_global.pdf" if "NLL" in metrics else "box_plots_local.pdf"
+        plt.savefig(output_path+filename, format="pdf", bbox_inches='tight', dpi=300)
         plt.close()
         
     elif kwargs.exp_name == 'usage_stats': 
@@ -1823,20 +2013,20 @@ def test(kwargs):
                     if data_name in ['cifar10', 'cifar100']:
                         if model_class == 'resnet':
                             folder = f"quantize_{data_name}_{num_classes}_classes_None_features"
-                            base_dir = 'REPLACE'
+                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'
                         elif model_class in ['convnext', 'ftt']:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = 'REPLACE'
+                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'
                         else:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = 'REPLACE'
+                            base_dir = '/home/barbera/calibration/localibration/results/metrics_vit/'
                     elif data_name in ['tissue', 'weather']:
                         if model_class == 'vit':
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = 'REPLACE'                
+                            base_dir = '/home/barbera/calibration/localibration/results/metrics_vit/'                
                         else:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = 'REPLACE'                                
+                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'                                
 
                     df = summarize_usage_stats(
                         base_dir,
@@ -1852,4 +2042,430 @@ def test(kwargs):
         if save_path is not None:
             agg_df.to_csv(save_path+'usage_stats.csv', index=False)
 
+    elif kwargs.exp_name == 'convnext_results':
+        method_names = ['VQ', 'LCN', 'RK', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
+        data_names = ['cifar10', 'cifar100', 'tissue'] #, 'weather', 'weather_shift'] # ['tissue'] 
+        model_class = 'vit' #'resnet' #'convnext' #'resnet'
+        dir = '/home/barbera/calibration/localibration/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
+
+        for data_name in data_names:
+            reusults_tables = []
+            for method_name in method_names: 
+                # method_name = "RK" # change if needed
+                # data_name = "tissue" # change if needed
+                
+                if method_name == "VQ":
+                    method = "quantize"  
+                elif method_name == "LCN":
+                    method = "calibrate"
+                elif method_name == "RK":
+                    method = "reference_kernel"
+                elif method_name == "SMS":
+                    method = "competition_SMS"
+                elif method_name == "DC":
+                    method = "competition_DC"
+                elif method_name == "PS":
+                    method = "competition_PS"
+                elif method_name == "TS":
+                    method = "competition_TS"
+                elif method_name == "IR":
+                    method = "competition_IR"   
+                elif method_name == "PC":
+                    method = "competition_PC" 
+                elif method_name == "NC":
+                    method = "pre-train"
+                    
+                if data_name == "tissue":
+                    num_classes = 8
+                elif data_name in ["weather", "weather_shift"]:
+                    num_classes = 5
+                elif data_name == "cifar10":
+                    num_classes = 10
+                elif data_name == "cifar100":
+                    num_classes = 100
+                
+                calsizes = [1.0]
+                seeds = range(42, 47)
+                
+                result_table = summarize_vq_by_calsize(base_dir=dir,
+                    calsizes=calsizes,
+                    seeds=seeds,
+                    method=method,
+                    data_name=data_name,
+                    num_classes=num_classes,        
+                    method_name=method_name,   
+                    model_class=model_class                 
+                )                                                    
+                
+                reusults_tables.append(result_table)
         
+            final_table = pd.concat(reusults_tables, ignore_index=True)   
+            final_table.drop(columns=['calsize'], inplace=True)
+                
+            output_dir = os.path.join(dir, f"summary_{model_class}_results_w_acc")
+            os.makedirs(output_dir, exist_ok=True) 
+                
+            final_table.to_csv(os.path.join(output_dir, f"{data_name}_{model_class}.csv"), index=False)     
+            print(f"\nSaved ablation results for {method_name} on {data_name} to {output_dir}")
+    
+    elif kwargs.exp_name == 'summary_diag_results':   
+        for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+            if data_name == 'weather':
+                model_class = 'ftt'                 
+            summarize_diag_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                   backbone=model_class, data_names=[data_name])
+            
+    elif kwargs.exp_name == 'summary_shuffle_results':   
+        for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+            if data_name == 'weather':
+                model_class = 'ftt'                 
+            summarize_shuffle_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                      backbone=model_class, data_names=[data_name])
+    
+    elif kwargs.exp_name == 'summary_finetune_results':   
+        for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+            if data_name == 'weather':
+                model_class = 'ftt'                 
+            summarize_finetune_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                        backbone=model_class, data_names=[data_name])
+            
+    elif kwargs.exp_name == 'summary_randompart_results':   
+        for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+            if data_name == 'weather':
+                model_class = 'ftt'                 
+            summarize_randompart_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                        backbone=model_class, data_names=[data_name])
+    
+    elif kwargs.exp_name == 'summary_normal_randompart_results':   
+        for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+            if data_name == 'weather':
+                model_class = 'ftt'                 
+            summarize_normal_randompart_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                        backbone=model_class, data_names=[data_name])
+            
+    elif kwargs.exp_name == 'summary_fixedclass_results':   
+            for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+                if data_name == 'weather':
+                    model_class = 'ftt'                 
+                summarize_fixedclass_results(base_dir=kwargs.save_path_calibration_metrics, 
+                                            backbone=model_class, data_names=[data_name])
+            
+    elif kwargs.exp_name == 'summary_gamma_results':   
+        summary_gamma_results(
+            base_dir=kwargs.save_path_calibration_metrics, 
+            output_folder="summary_gamma_results",
+            datasets=("cifar10", "cifar100", "tissue"),
+            seeds=range(42, 47),
+            gammas=(0.1, 1.0, 5.0, 7.0, 10.0, 100.0),
+            decimals=6,
+        )                            
+                
+    elif kwargs.exp_name == 'summary_ecce_mad_results':   
+        # for data_name in ['cifar10', 'cifar100', 'tissue', 'weather']:    
+        #     if data_name == 'weather':
+        #         model_class = 'ftt'                 
+        aggregate_ecce_mad_scores(base_dir=kwargs.save_path_calibration_metrics)
+        
+    elif kwargs.exp_name == 'selective_prediction':        
+    
+        datasets = ["cifar10", "cifar100", "tissue", "weather"]
+        seeds = [42, 43, 44, 45, 46]
+        target_coverages = [.70, .75, .80, .85, .90, .95]
+        metas = ["VQ", "NC", "DC", "SMS"]
+        
+        output_folder = "selective_prediction"
+        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
+        os.makedirs(output_dir, exist_ok=True) 
+        output_file = os.path.join(output_dir, "selective_results.csv")        
+
+        all_results = pd.DataFrame()
+
+        for dataset in datasets:    
+            print('\n', dataset, '\n')    
+            for seed in seeds:
+                res = selective_prediction_test(
+                    dataset=dataset,
+                    seed=seed,
+                    target_coverages=target_coverages,
+                    metas=metas,
+                )
+                all_results = pd.concat([all_results, res], ignore_index=True)
+
+        all_results.to_csv(output_file, index=False)
+            
+        print(f"Results saved to {output_file}")
+
+
+    elif kwargs.exp_name == 'conformal_prediction':
+
+        datasets = ["cifar10", "cifar100", "tissue", "weather"]
+        seeds = [42, 43, 44, 45, 46]
+        target_coverages = [.70, .75, .80, .85, .90, .95, .99]
+        metas = ["VQ", "NC", "DC", "SMS"]
+
+        add = 'pred_conf' # 'true_conf'
+        
+        output_folder = "summary_conformal_results"
+        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, f"conformal_results_{add}.csv")
+        ess_output_file = os.path.join(
+            output_dir,
+            f"conformal_results_by_ess_{add}.csv",
+        )
+
+        all_results = pd.DataFrame()
+        all_ess_results = pd.DataFrame()
+
+        for dataset in datasets:
+            print('\n', dataset, '\n')
+            for seed in seeds:
+                res, ess_res = conformal_prediction_test(
+                    dataset=dataset,
+                    seed=seed,
+                    target_coverages=target_coverages,
+                    metas=metas,
+                    return_ess_results=True,
+                    use_predicted_confidence=True
+                )
+                all_results = pd.concat([all_results, res], ignore_index=True)
+                all_ess_results = pd.concat(
+                    [all_ess_results, ess_res],
+                    ignore_index=True,
+                )
+
+        all_results.to_csv(output_file, index=False)
+        all_ess_results = all_ess_results.sort_values(
+            ["dataset", "target_coverage", "method", "ess_bin"],
+            ignore_index=True,
+        )
+        all_ess_results.to_csv(ess_output_file, index=False)
+
+        print(f"Results saved to {output_file}")
+        print(f"ESS-binned results saved to {ess_output_file}")
+
+        # Average every reported numeric metric over the five seeds while
+
+        output_folder = "summary_conformal_results"
+        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, f"conformal_results_{add}.csv")
+        ess_output_file = os.path.join(
+            output_dir,
+            f"conformal_results_by_ess_{add}.csv",
+        )
+        
+        all_results = pd.read_csv(output_file)
+        # retaining one row for each dataset, method, and target coverage.
+        average_group_columns = [
+            "method",
+            "target_coverage",
+            "dataset",
+            "num_classes",
+        ]
+        average_metric_columns = [
+            column
+            for column in all_results.select_dtypes(include=[np.number]).columns
+            if column not in average_group_columns + ["seed"]
+        ]
+        average_results = (
+            all_results.groupby(average_group_columns, as_index=False)[
+                average_metric_columns
+            ]
+            .mean()
+        )
+
+        # Keep the averaged CSV in the same column order as the per-seed CSV,
+        # with the now-irrelevant seed column omitted.
+        average_results = average_results[
+            [
+                column
+                for column in all_results.columns
+                if column != "seed" and column in average_results.columns
+            ]
+        ]
+
+        dataset_order = ["cifar10", "cifar100", "tissue", "weather"]
+        method_order = ["VQ", "SMS", "DC", "NC"]
+        average_results["dataset"] = pd.Categorical(
+            average_results["dataset"],
+            categories=dataset_order,
+            ordered=True,
+        )
+        average_results["method"] = pd.Categorical(
+            average_results["method"],
+            categories=method_order,
+            ordered=True,
+        )
+        average_results = average_results.sort_values(
+            ["dataset", "target_coverage", "method"],
+            ignore_index=True,
+        )
+
+        average_output_file = os.path.join(
+            output_dir,
+            f"conformal_results_averages_{add}.csv",
+        )
+        average_results.to_csv(average_output_file, index=False)
+
+        print(f"Averaged results saved to {average_output_file}")
+
+        # Average the ESS-binned metrics over the five seeds, retaining one
+        # row for every dataset, method, target coverage, and ESS bin.
+        ess_results = pd.read_csv(ess_output_file)
+        ess_average_group_columns = [
+            "method",
+            "target_coverage",
+            "dataset",
+            "num_classes",
+            "ess_bin",
+        ]
+        ess_average_metric_columns = [
+            column
+            for column in ess_results.select_dtypes(include=[np.number]).columns
+            if column not in ess_average_group_columns + ["seed"]
+        ]
+        ess_average_results = (
+            ess_results.groupby(
+                ess_average_group_columns,
+                as_index=False,
+            )[ess_average_metric_columns]
+            .mean()
+        )
+
+        # Preserve the per-seed ESS file's column order while omitting seed.
+        ess_average_results = ess_average_results[
+            [
+                column
+                for column in ess_results.columns
+                if column != "seed" and column in ess_average_results.columns
+            ]
+        ]
+
+        ess_average_results["dataset"] = pd.Categorical(
+            ess_average_results["dataset"],
+            categories=dataset_order,
+            ordered=True,
+        )
+        ess_average_results["method"] = pd.Categorical(
+            ess_average_results["method"],
+            categories=method_order,
+            ordered=True,
+        )
+        ess_average_results = ess_average_results.sort_values(
+            ["dataset", "ess_bin", "target_coverage", "method"],
+            ignore_index=True,
+        )
+
+        ess_average_output_file = os.path.join(
+            output_dir,
+            f"conformal_results_by_ess_averages_{add}.csv",
+        )
+        ess_average_results.to_csv(
+            ess_average_output_file,
+            index=False,
+        )
+
+        print(
+            "Averaged ESS-binned results saved to "
+            f"{ess_average_output_file}"
+        )
+
+        # Plot every ESS-binned numeric metric.  Each metric gets four figures
+        # (one per dataset), with one panel per target coverage and one line
+        # per method so that coverage and method effects remain distinguishable.
+        import matplotlib.pyplot as plt
+
+        plots_dir = os.path.join(output_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+
+        plot_excluded_columns = {
+            "target_coverage",
+            "ess_bin",
+            "num_classes",
+            "n_calibration",
+            "n_test",
+        }
+        plot_metric_columns = [
+            column
+            for column in ess_average_results.select_dtypes(
+                include=[np.number]
+            ).columns
+            if column not in plot_excluded_columns
+        ]
+
+        for dataset in dataset_order:
+            dataset_results = ess_average_results[
+                ess_average_results["dataset"] == dataset
+            ]
+            dataset_coverages = sorted(
+                dataset_results["target_coverage"].unique()
+            )
+
+            for metric_name in plot_metric_columns:
+                figure, axes = plt.subplots(
+                    2,
+                    4,
+                    figsize=(18, 9),
+                    sharex=True,
+                )
+                flat_axes = axes.ravel()
+
+                for coverage_index, coverage in enumerate(
+                    dataset_coverages
+                ):
+                    axis = flat_axes[coverage_index]
+                    coverage_results = dataset_results[
+                        dataset_results["target_coverage"] == coverage
+                    ]
+
+                    for method in method_order:
+                        method_results = coverage_results[
+                            coverage_results["method"] == method
+                        ].sort_values("ess_bin")
+                        if method_results.empty:
+                            continue
+                        axis.plot(
+                            method_results["ess_bin"],
+                            method_results[metric_name],
+                            marker="o",
+                            linewidth=1.8,
+                            label=method,
+                        )
+
+                    axis.set_title(f"Coverage {coverage:.2f}")
+                    axis.set_xlabel("ESS bin")
+                    axis.set_ylabel(metric_name.replace("_", " "))
+                    axis.set_xticks(range(10))
+                    axis.grid(alpha=0.3)
+                    axis.legend(
+                        title="Method",
+                        loc="best",
+                        frameon=True,
+                    )
+
+                for unused_axis in flat_axes[len(dataset_coverages):]:
+                    unused_axis.set_visible(False)
+
+                handles, labels = flat_axes[0].get_legend_handles_labels()
+                if handles:
+                    figure.legend(
+                        handles,
+                        labels,
+                        loc="lower center",
+                        ncol=len(method_order),
+                        frameon=False,
+                    )
+                figure.suptitle(
+                    f"{dataset}: {metric_name.replace('_', ' ')} by ESS bin"
+                )
+                figure.tight_layout(rect=[0, 0.06, 1, 0.96])
+
+                plot_file = os.path.join(
+                    plots_dir,
+                    f"conformal_{dataset}_{metric_name}_{add}.png",
+                )
+                figure.savefig(plot_file, dpi=300, bbox_inches="tight")
+                plt.close(figure)
+
+        print(f"ESS-binned conformal plots saved to {plots_dir}")

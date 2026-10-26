@@ -5,8 +5,8 @@ model: quantiser
 data_name: 'otto'
 
 optimizer:
-  name: adam #sgd #adam 
-  lr: 1e-3 #1e-3
+  name: adam #sgd #adam #lbfgs
+  lr: 1e-3 #1e-3 #0.1 for lbfgs
   weight_decay: 0. #0.0001
   maxiter: 500
 
@@ -14,7 +14,7 @@ loss:
   name: #focal
   gamma: 2
 
-# calibration hyper-parameters                                                                                                                                                                                        
+# calibration hyper-parameters
 slots: [64] #[16, 32, 128, 256] # USED 128 FOR VIT WITH TISSUE # 192 FOR VIT WITH CIFAR100
 S: 64
 d: 32
@@ -29,10 +29,18 @@ similarity_dim: 50
 adabw: False                # If true uses adaptive bandwidth for lce computation else fixed bandwidth
 learn_pi: False             # If true learns the prior probabilities of the VQ codebook vectors
 diag: False                 # If true learns the diagonal latent miscalibration component
-lambda_reg: 0.              # Weight of the regularization term (not used?)
+lambda_reg: 0.              # unused actually
+lambda_a: 0.                # Weight for A (row factors) L2 regularization
+lambda_b: 0.                # Weight for B (column factors) L2 regularization
+lambda_sigma: 0.            # Weight for sigma (T) regularization
 random: False               # If true uses random quantization indices instead of VQ indices during training
 L1: False                   # If true uses L1 distance instead of L2 distance for the VQ codebook vectors
 quantization_only: False    # If true only performs quantization without calibration
+finetune_only: False        # If true only performs finetuning of the classifier's head without quantizatino and Dirichlet calibration
 standard_dirichlet: False   # If true uses standard dirichlet calibration on top of quantization
 learn_bias: False           # If true learns a bias term per codebook vector
 quadratic: False            # If true uses quadratic calibration on top of quantization
+random_shuffle: False       # If true randomly shuffle embeddings before quantisation, then feeds quantize but in correct order embeddings to the classifier. The goal is to not quantize contiguous embeddings, but still use the quantized embeddings for classification. 
+random_partition: False     # If True random partitions the embeddings with actual samples and does not fine-tune the vq-classification head but uses the pre-trained model's head. Then VQ-calibrates
+normal_random_partition: False  # If True random partitions the embeddings with standard normal samples and does not fine-tune the vq-classification head but uses the pre-trained model's head. Then VQ-calibrates
+fixed_classifier: False     # If True learns VQ but uses the fixed pre-trained model's head. Then VQ-calibrates. 
