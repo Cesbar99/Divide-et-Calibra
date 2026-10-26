@@ -9,7 +9,8 @@ from src.actions.test import *
 from src.utils.utils import *
 from src.actions.calibrate import *
 from src.actions.quantize import *
-from src.actions.replicate import *
+from src.actions.quantize_lbfgs import quantize_LBFGS
+#from src.actions.replicate import *
 from src.actions.competition import *
 from src.actions.viz_and_test import *
 from pytorch_lightning.loggers import WandbLogger
@@ -78,52 +79,58 @@ def main(cfg: DictConfig):
             pretrain(kwargs, wandb_logger)
         
     elif kwargs.test:
-        print("Testing model...")        
+        print("Testing model...") 
+        if kwargs.only_ecce_mad:
+            print("Computing only ECCE-MAD metric...")       
         #for seed in kwargs.seeds:   
-        if 'competition' in exp_name:    
-            kwargs.exp_name = 'competition'                        
-            for method in kwargs.methods:       
-                if kwargs.only_test:
-                    print(f'Using method: {method}')             
-                pl.seed_everything(seed)       
-                kwargs.seed = seed
-                kwargs.checkpoint.seed = seed
-                kwargs.method = method                    
-                test(kwargs)
-        elif 'calibrate' in exp_name:    
-            kwargs.exp_name = 'calibrate'
-            pl.seed_everything(seed)       
-            kwargs.seed = seed
-            kwargs.checkpoint.seed = seed
-            test(kwargs)     
-        elif 'quantize' in exp_name:    
-            kwargs.exp_name = 'quantize'
-            for slot in kwargs.models.slots:
-                kwargs.models.S = slot
-                repr_dim = 768 if model_class in ['vit', "convnext"] else 2048
-                kwargs.models.d = int(repr_dim/slot)
-                kwargs.dataset.feature_dim = repr_dim
-                print(f'Testing model with {kwargs.models.d} dimensions per slot...')
-                print(f'Testing model with {kwargs.models.S} slots...')
-                for kappa in kwargs.models.kappas:
-                    kwargs.models.K = kappa               
-                    print(f'Testing model with {kwargs.models.K} codewords...')
+        if 'competition' in exp_name:                
+            kwargs.exp_name = 'competition'   
+            for seed in kwargs.seeds:                        
+                for method in kwargs.methods:       
+                    if kwargs.only_test:
+                        print(f'Using method: {method}')             
                     pl.seed_everything(seed)       
                     kwargs.seed = seed
                     kwargs.checkpoint.seed = seed
-                    test(kwargs)    
+                    kwargs.method = method                    
+                    test(kwargs)
+        elif 'calibrate' in exp_name:    
+            kwargs.exp_name = 'calibrate'
+            for seed in kwargs.seeds:   
+                pl.seed_everything(seed)       
+                kwargs.seed = seed
+                kwargs.checkpoint.seed = seed
+                test(kwargs)     
+        elif 'quantize' in exp_name:    
+            kwargs.exp_name = 'quantize'
+            for seed in kwargs.seeds:   
+                for slot in kwargs.models.slots:
+                    kwargs.models.S = slot
+                    repr_dim = 768 if model_class in ['vit', "convnext"] else 2048
+                    kwargs.models.d = int(repr_dim/slot)
+                    kwargs.dataset.feature_dim = repr_dim
+                    print(f'Testing model with {kwargs.models.d} dimensions per slot...')
+                    print(f'Testing model with {kwargs.models.S} slots...')
+                    for kappa in kwargs.models.kappas:
+                        kwargs.models.K = kappa               
+                        print(f'Testing model with {kwargs.models.K} codewords...')
+                        pl.seed_everything(seed)       
+                        kwargs.seed = seed
+                        kwargs.checkpoint.seed = seed
+                        test(kwargs)    
         elif 'pre-train' in exp_name:    
-            kwargs.exp_name = 'pre-train'
+            kwargs.exp_name = 'pre-train'            
             for seed in kwargs.seeds:   
                 pl.seed_everything(seed)     
                 kwargs.seed = seed
                 test(kwargs)       
         elif 'replicate' in exp_name:    
-            kwargs.exp_name = 'replicate'                            
-            pl.seed_everything(seed)       
-            kwargs.seed = seed
-            kwargs.checkpoint.seed = seed
-            test(kwargs)   
+            kwargs.exp_name = 'replicate'   
+            for seed in kwargs.seeds:                            
+                pl.seed_everything(seed)       
+                kwargs.seed = seed
+                kwargs.checkpoint.seed = seed
+                test(kwargs)   
         elif 'ess_plot' in exp_name:
             kwargs.exp_name = 'ess_plot'                            
             # pl.seed_everything(seed)       
@@ -148,6 +155,48 @@ def main(cfg: DictConfig):
             # kwargs.seed = seed
             # kwargs.checkpoint.seed = seed
             test(kwargs)   
+        elif 'summary_diag_results' in exp_name:
+            kwargs.exp_name = 'summary_diag_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)   
+        elif 'summary_shuffle_results' in exp_name:
+            kwargs.exp_name = 'summary_shuffle_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)      
+        elif 'summary_finetune_results' in exp_name:
+            kwargs.exp_name = 'summary_finetune_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)   
+        elif 'summary_randompart_results' in exp_name:
+            kwargs.exp_name = 'summary_randompart_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)      
+        elif 'summary_normal_randompart_results' in exp_name:
+            kwargs.exp_name = 'summary_normal_randompart_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)                      
+        elif 'summary_fixedclass_results' in exp_name:
+            kwargs.exp_name = 'summary_fixedclass_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)      
+        elif 'summary_gamma_results' in exp_name:
+            kwargs.exp_name = 'summary_gamma_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)              
         elif 'ablate_vq' in exp_name:
             kwargs.exp_name = 'ablate_vq'                            
             # pl.seed_everything(seed)       
@@ -177,7 +226,22 @@ def main(cfg: DictConfig):
             # pl.seed_everything(seed)       
             # kwargs.seed = seed
             # kwargs.checkpoint.seed = seed
-            test(kwargs)              
+            test(kwargs)        
+        elif 'summary_ecce_mad_results' in exp_name:
+            kwargs.exp_name = 'summary_ecce_mad_results'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)         
+        elif 'selective_prediction' in exp_name:
+            kwargs.exp_name = 'selective_prediction'                            
+            # pl.seed_everything(seed)       
+            # kwargs.seed = seed
+            # kwargs.checkpoint.seed = seed
+            test(kwargs)       
+        elif 'conformal_prediction' in exp_name:
+            kwargs.exp_name = 'conformal_prediction'
+            test(kwargs)
                       
     elif kwargs.calibrate:                
         kwargs.exp_name = 'calibrate'        
@@ -220,6 +284,11 @@ def main(cfg: DictConfig):
             print("Using quadratic calibration model...")
         else:
             print("Using linear calibration model...")
+            
+        if kwargs.models.diag:
+            print("Using A regularizer set to: ", kwargs.models.lambda_a)
+            print("Using B regularizer set to: ", kwargs.models.lambda_b)
+            print("Using diagonal scaling regularizer set to: ", kwargs.models.lambda_sigma)
                 
         if kwargs.dataset.batch_size is None:
             kwargs.dataset.batch_size = kwargs.batch_size_map.get(kwargs.exp_name, 512)  # fallback default        
@@ -248,7 +317,11 @@ def main(cfg: DictConfig):
                     for subsample in kwargs.dataset.subsamples:
                         kwargs.dataset.subsample = subsample
                         print(f'\nUsing subsample: {kwargs.dataset.subsample}\n')        
-                        quantize(kwargs, wandb_logger)
+                        if str(kwargs.models.optimizer.name).lower() == "lbfgs":
+                            print('\nUSING LBFGS OPTIMIZER FOR QUANTIZATION\n')
+                            quantize_LBFGS(kwargs, wandb_logger)
+                        else:
+                            quantize(kwargs, wandb_logger)
 
     elif kwargs.replicate:                
         kwargs.exp_name = 'replicate'        
@@ -345,7 +418,7 @@ def main_entry():
             main(cfg)
             
         elif cfg.test:
-            if cfg.exp_name not in ['pre-train', 'calibrate', 'competition', 'quantize', 'replicate', 'ess_plot', 'ablate_cal_size', 'ablate_s_k_tissue', 'convnext_results', 'ablate_vq', 'corruption_results', 'calsize_plots', 'box_plots', 'usage_stats']:
+            if cfg.exp_name not in ['pre-train', 'calibrate', 'competition', 'quantize', 'replicate', 'ess_plot', 'ablate_cal_size', 'ablate_s_k_tissue', 'convnext_results', 'ablate_vq', 'corruption_results', 'calsize_plots', 'box_plots', 'usage_stats', 'summary_diag_results', 'summary_shuffle_results', 'summary_finetune_results', 'summary_randompart_results', 'summary_normal_randompart_results', 'summary_ecce_mad_results', 'summary_gamma_results', 'summary_fixedclass_results', 'selective_prediction', 'conformal_prediction']:
                 raise ValueError(f"Explicitly provide 'exp_name' argument from CLI when testing! Allowed values are 'pre-train', 'calibrate', 'competition', 'quantize', 'replicate'. Instead '{cfg.exp_name}' was given!")                 
             
             elif cfg.exp_name == 'pre-train':
@@ -402,6 +475,66 @@ def main_entry():
                 model_name = 'competition'
                 cfg = compose(config_name="config_local", overrides=full_overrides)
             
+            elif cfg.exp_name == 'summary_diag_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+            
+            elif cfg.exp_name == 'summary_shuffle_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                    
+            elif cfg.exp_name == 'summary_finetune_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                
+            elif cfg.exp_name == 'summary_randompart_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+            
+            elif cfg.exp_name == 'summary_normal_randompart_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                
+            elif cfg.exp_name == 'summary_fixedclass_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                
+            elif cfg.exp_name == 'summary_gamma_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+            
+            elif cfg.exp_name == 'selective_prediction':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+            
+            elif cfg.exp_name == 'conformal_prediction':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                            
+            elif cfg.exp_name == 'summary_ecce_mad_results':
+                model_name = 'competition'
+                full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
+                model_name = 'competition'
+                cfg = compose(config_name="config_local", overrides=full_overrides)
+                
             elif cfg.exp_name == 'ablate_vq':
                 model_name = 'competition'
                 full_overrides = init_overrides + [f"dataset={dataset_name}", f"models={model_name}"] + second_overrides
@@ -504,6 +637,11 @@ def run_quantize(kwargs, wandb_logger, model_class=None):
         print('Using default batch_size set to: ', kwargs.dataset.batch_size) 
     else:
         print('Using batch_size set to: ', kwargs.dataset.batch_size)
+    
+    if kwargs.models.diag:
+        print("Using A regularizer set to: ", kwargs.models.lambda_a)
+        print("Using B regularizer set to: ", kwargs.models.lambda_b)
+        print("Using diagonal scaling regularizer set to: ", kwargs.models.lambda_sigma)
                     
     for slot in kwargs.models.slots:
         kwargs.models.S = slot
@@ -614,13 +752,13 @@ def update_config_for_stage(cfg, stage):
 
     ################### QUANTIZER CONFIGS ###################
     elif stage == 'quantize':
-        
+
         cfg.dataset.batch_size=128
         cfg.extract_embeddings = False
-  
-        cfg.models.optimizer.weight_decay = 1e-3 #0.0001                
-        
-        # calibration hyper-parameters                                                                                                                                                                                        
+
+        cfg.models.optimizer.weight_decay = 1e-3 #0.0001
+
+        # calibration hyper-parameters
         cfg.models.slots = [64] #[16, 32, 128, 256] # USED 128 FOR VIT WITH TISSUE # 192 FOR VIT WITH CIFAR100
         cfg.models.S = 64
         cfg.models.d = 32
@@ -635,7 +773,9 @@ def update_config_for_stage(cfg, stage):
         cfg.models.adabw = False                # If true uses adaptive bandwidth for lce computation else fixed bandwidth
         cfg.models.learn_pi = True              # If true learns the prior probabilities of the VQ codebook vectors
         cfg.models.diag = False                 # If true learns the diagonal latent miscalibration component
-        cfg.models.lambda_reg = 0.              # Weight of the regularization term (not used?)
+        cfg.models.lambda_a = 0.                # Weight for A (row factors) L2 regularization
+        cfg.models.lambda_b = 0.                # Weight for B (column factors) L2 regularization
+        cfg.models.lambda_sigma = 0.            # Weight for sigma (T) regularization
         cfg.models.random = False               # If true uses random quantization indices instead of VQ indices during training
         cfg.models.L1 = False                   # If true uses L1 distance instead of L2 distance for the VQ codebook vectors
         cfg.models.quantization_only = False    # If true only performs quantization without calibration
