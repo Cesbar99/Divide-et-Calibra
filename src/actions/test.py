@@ -1402,7 +1402,7 @@ def test(kwargs):
         method_names = ['VQ', 'LCN', 'RK', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
         data_names = ['cifar10', 'cifar100', 'tissue'] #, 'weather', 'weather_shift'] # ['tissue'] 
         model_class = 'vit' #'resnet' #'convnext' #'resnet'
-        dir = '/home/barbera/calibration/localibration/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
+        dir = '/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
 
         for data_name in data_names:
             reusults_tables = []
@@ -1865,10 +1865,10 @@ def test(kwargs):
             print(f"Saved: {output_path}")
             
     elif kwargs.exp_name == 'box_plots': 
-        output_path = os.path.join('/home/barbera/calibration/localibration/results/metrics_boxplot/', "box_plots/")       
+        output_path = os.path.join('/results/metrics_boxplot/', "box_plots/")       
         os.makedirs(output_path, exist_ok=True)
         
-        base_folder = '/home/barbera/calibration/localibration/results/metrics_boxplot/'
+        base_folder = '/results/metrics_boxplot/'
         methods = ['VQ', 'LN', 'KC', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
         seeds = [42, 43, 44, 45, 46]
         datasets = ['cifar10', 'cifar100', 'tissue']
@@ -2013,20 +2013,20 @@ def test(kwargs):
                     if data_name in ['cifar10', 'cifar100']:
                         if model_class == 'resnet':
                             folder = f"quantize_{data_name}_{num_classes}_classes_None_features"
-                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'
+                            base_dir = kwargs.save_path_calibration_metrics
                         elif model_class in ['convnext', 'ftt']:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'
+                            base_dir = kwargs.save_path_calibration_metrics
                         else:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = '/home/barbera/calibration/localibration/results/metrics_vit/'
+                            base_dir = '/results/metrics_vit/'
                     elif data_name in ['tissue', 'weather']:
                         if model_class == 'vit':
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = '/home/barbera/calibration/localibration/results/metrics_vit/'                
+                            base_dir = '/results/metrics_vit/'                
                         else:
                             folder = f"quantize_{data_name}_calsize_1.0_{num_classes}_classes_None_features"
-                            base_dir = '/home/barbera/calibration/localibration/results/metrics/'                                
+                            base_dir = kwargs.save_path_calibration_metrics                                
 
                     df = summarize_usage_stats(
                         base_dir,
@@ -2046,7 +2046,7 @@ def test(kwargs):
         method_names = ['VQ', 'LCN', 'RK', 'SMS', 'DC', 'PS', 'TS', 'IR', 'PC', 'NC']
         data_names = ['cifar10', 'cifar100', 'tissue'] #, 'weather', 'weather_shift'] # ['tissue'] 
         model_class = 'vit' #'resnet' #'convnext' #'resnet'
-        dir = '/home/barbera/calibration/localibration/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
+        dir = '/results/metrics_vit/'  # kwargs.save_path_calibration_metrics
 
         for data_name in data_names:
             reusults_tables = []
@@ -2166,306 +2166,4 @@ def test(kwargs):
         #         model_class = 'ftt'                 
         aggregate_ecce_mad_scores(base_dir=kwargs.save_path_calibration_metrics)
         
-    elif kwargs.exp_name == 'selective_prediction':        
-    
-        datasets = ["cifar10", "cifar100", "tissue", "weather"]
-        seeds = [42, 43, 44, 45, 46]
-        target_coverages = [.70, .75, .80, .85, .90, .95]
-        metas = ["VQ", "NC", "DC", "SMS"]
-        
-        output_folder = "selective_prediction"
-        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
-        os.makedirs(output_dir, exist_ok=True) 
-        output_file = os.path.join(output_dir, "selective_results.csv")        
-
-        all_results = pd.DataFrame()
-
-        for dataset in datasets:    
-            print('\n', dataset, '\n')    
-            for seed in seeds:
-                res = selective_prediction_test(
-                    dataset=dataset,
-                    seed=seed,
-                    target_coverages=target_coverages,
-                    metas=metas,
-                )
-                all_results = pd.concat([all_results, res], ignore_index=True)
-
-        all_results.to_csv(output_file, index=False)
-            
-        print(f"Results saved to {output_file}")
-
-
-    elif kwargs.exp_name == 'conformal_prediction':
-
-        datasets = ["cifar10", "cifar100", "tissue", "weather"]
-        seeds = [42, 43, 44, 45, 46]
-        target_coverages = [.70, .75, .80, .85, .90, .95, .99]
-        metas = ["VQ", "NC", "DC", "SMS"]
-
-        add = 'pred_conf' # 'true_conf'
-        
-        output_folder = "summary_conformal_results"
-        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
-        os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"conformal_results_{add}.csv")
-        ess_output_file = os.path.join(
-            output_dir,
-            f"conformal_results_by_ess_{add}.csv",
-        )
-
-        all_results = pd.DataFrame()
-        all_ess_results = pd.DataFrame()
-
-        for dataset in datasets:
-            print('\n', dataset, '\n')
-            for seed in seeds:
-                res, ess_res = conformal_prediction_test(
-                    dataset=dataset,
-                    seed=seed,
-                    target_coverages=target_coverages,
-                    metas=metas,
-                    return_ess_results=True,
-                    use_predicted_confidence=True
-                )
-                all_results = pd.concat([all_results, res], ignore_index=True)
-                all_ess_results = pd.concat(
-                    [all_ess_results, ess_res],
-                    ignore_index=True,
-                )
-
-        all_results.to_csv(output_file, index=False)
-        all_ess_results = all_ess_results.sort_values(
-            ["dataset", "target_coverage", "method", "ess_bin"],
-            ignore_index=True,
-        )
-        all_ess_results.to_csv(ess_output_file, index=False)
-
-        print(f"Results saved to {output_file}")
-        print(f"ESS-binned results saved to {ess_output_file}")
-
-        # Average every reported numeric metric over the five seeds while
-
-        output_folder = "summary_conformal_results"
-        output_dir = os.path.join(kwargs.save_path_calibration_metrics, output_folder)
-        os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"conformal_results_{add}.csv")
-        ess_output_file = os.path.join(
-            output_dir,
-            f"conformal_results_by_ess_{add}.csv",
-        )
-        
-        all_results = pd.read_csv(output_file)
-        # retaining one row for each dataset, method, and target coverage.
-        average_group_columns = [
-            "method",
-            "target_coverage",
-            "dataset",
-            "num_classes",
-        ]
-        average_metric_columns = [
-            column
-            for column in all_results.select_dtypes(include=[np.number]).columns
-            if column not in average_group_columns + ["seed"]
-        ]
-        average_results = (
-            all_results.groupby(average_group_columns, as_index=False)[
-                average_metric_columns
-            ]
-            .mean()
-        )
-
-        # Keep the averaged CSV in the same column order as the per-seed CSV,
-        # with the now-irrelevant seed column omitted.
-        average_results = average_results[
-            [
-                column
-                for column in all_results.columns
-                if column != "seed" and column in average_results.columns
-            ]
-        ]
-
-        dataset_order = ["cifar10", "cifar100", "tissue", "weather"]
-        method_order = ["VQ", "SMS", "DC", "NC"]
-        average_results["dataset"] = pd.Categorical(
-            average_results["dataset"],
-            categories=dataset_order,
-            ordered=True,
-        )
-        average_results["method"] = pd.Categorical(
-            average_results["method"],
-            categories=method_order,
-            ordered=True,
-        )
-        average_results = average_results.sort_values(
-            ["dataset", "target_coverage", "method"],
-            ignore_index=True,
-        )
-
-        average_output_file = os.path.join(
-            output_dir,
-            f"conformal_results_averages_{add}.csv",
-        )
-        average_results.to_csv(average_output_file, index=False)
-
-        print(f"Averaged results saved to {average_output_file}")
-
-        # Average the ESS-binned metrics over the five seeds, retaining one
-        # row for every dataset, method, target coverage, and ESS bin.
-        ess_results = pd.read_csv(ess_output_file)
-        ess_average_group_columns = [
-            "method",
-            "target_coverage",
-            "dataset",
-            "num_classes",
-            "ess_bin",
-        ]
-        ess_average_metric_columns = [
-            column
-            for column in ess_results.select_dtypes(include=[np.number]).columns
-            if column not in ess_average_group_columns + ["seed"]
-        ]
-        ess_average_results = (
-            ess_results.groupby(
-                ess_average_group_columns,
-                as_index=False,
-            )[ess_average_metric_columns]
-            .mean()
-        )
-
-        # Preserve the per-seed ESS file's column order while omitting seed.
-        ess_average_results = ess_average_results[
-            [
-                column
-                for column in ess_results.columns
-                if column != "seed" and column in ess_average_results.columns
-            ]
-        ]
-
-        ess_average_results["dataset"] = pd.Categorical(
-            ess_average_results["dataset"],
-            categories=dataset_order,
-            ordered=True,
-        )
-        ess_average_results["method"] = pd.Categorical(
-            ess_average_results["method"],
-            categories=method_order,
-            ordered=True,
-        )
-        ess_average_results = ess_average_results.sort_values(
-            ["dataset", "ess_bin", "target_coverage", "method"],
-            ignore_index=True,
-        )
-
-        ess_average_output_file = os.path.join(
-            output_dir,
-            f"conformal_results_by_ess_averages_{add}.csv",
-        )
-        ess_average_results.to_csv(
-            ess_average_output_file,
-            index=False,
-        )
-
-        print(
-            "Averaged ESS-binned results saved to "
-            f"{ess_average_output_file}"
-        )
-
-        # Plot every ESS-binned numeric metric.  Each metric gets four figures
-        # (one per dataset), with one panel per target coverage and one line
-        # per method so that coverage and method effects remain distinguishable.
-        import matplotlib.pyplot as plt
-
-        plots_dir = os.path.join(output_dir, "plots")
-        os.makedirs(plots_dir, exist_ok=True)
-
-        plot_excluded_columns = {
-            "target_coverage",
-            "ess_bin",
-            "num_classes",
-            "n_calibration",
-            "n_test",
-        }
-        plot_metric_columns = [
-            column
-            for column in ess_average_results.select_dtypes(
-                include=[np.number]
-            ).columns
-            if column not in plot_excluded_columns
-        ]
-
-        for dataset in dataset_order:
-            dataset_results = ess_average_results[
-                ess_average_results["dataset"] == dataset
-            ]
-            dataset_coverages = sorted(
-                dataset_results["target_coverage"].unique()
-            )
-
-            for metric_name in plot_metric_columns:
-                figure, axes = plt.subplots(
-                    2,
-                    4,
-                    figsize=(18, 9),
-                    sharex=True,
-                )
-                flat_axes = axes.ravel()
-
-                for coverage_index, coverage in enumerate(
-                    dataset_coverages
-                ):
-                    axis = flat_axes[coverage_index]
-                    coverage_results = dataset_results[
-                        dataset_results["target_coverage"] == coverage
-                    ]
-
-                    for method in method_order:
-                        method_results = coverage_results[
-                            coverage_results["method"] == method
-                        ].sort_values("ess_bin")
-                        if method_results.empty:
-                            continue
-                        axis.plot(
-                            method_results["ess_bin"],
-                            method_results[metric_name],
-                            marker="o",
-                            linewidth=1.8,
-                            label=method,
-                        )
-
-                    axis.set_title(f"Coverage {coverage:.2f}")
-                    axis.set_xlabel("ESS bin")
-                    axis.set_ylabel(metric_name.replace("_", " "))
-                    axis.set_xticks(range(10))
-                    axis.grid(alpha=0.3)
-                    axis.legend(
-                        title="Method",
-                        loc="best",
-                        frameon=True,
-                    )
-
-                for unused_axis in flat_axes[len(dataset_coverages):]:
-                    unused_axis.set_visible(False)
-
-                handles, labels = flat_axes[0].get_legend_handles_labels()
-                if handles:
-                    figure.legend(
-                        handles,
-                        labels,
-                        loc="lower center",
-                        ncol=len(method_order),
-                        frameon=False,
-                    )
-                figure.suptitle(
-                    f"{dataset}: {metric_name.replace('_', ' ')} by ESS bin"
-                )
-                figure.tight_layout(rect=[0, 0.06, 1, 0.96])
-
-                plot_file = os.path.join(
-                    plots_dir,
-                    f"conformal_{dataset}_{metric_name}_{add}.png",
-                )
-                figure.savefig(plot_file, dpi=300, bbox_inches="tight")
-                plt.close(figure)
-
-        print(f"ESS-binned conformal plots saved to {plots_dir}")
+   
